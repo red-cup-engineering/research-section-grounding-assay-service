@@ -3,6 +3,11 @@
   "version": "0.1.2",
   "type": "module",
   "description": "Deterministically admits only provider-distinct forecast sections bound to supplied evidence references and typed fact identifiers.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-web-engineering-services-section.git",
+    "directory": "services/web-platform-services-section/services/web2-platform-services-section/services/web2-financial-platform-services-section/services/web2-financial-brokerage-platform-services-section/services/alpaca-services-section/services/research-section-grounding-assay-service"
+  },
   "exports": {
     ".": "./src/assay.mjs",
     "./schemas": "./src/schemas.mjs"
