@@ -16,7 +16,7 @@
     "src/"
   ],
   "dependencies": {
-    "@red-cup-engineering/json-schema-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/json-schema-services-section": "workspace:*",
     "@red-cup-engineering/investment-research-work-lot-service": "workspace:*"
   },
   "scripts": {
