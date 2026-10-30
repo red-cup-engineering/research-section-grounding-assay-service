@@ -28,3 +28,62 @@ test("admits exact grounded model judgments and refuses invented references", ()
 test("refuses malformed receiver JSON before grounding", () => {
   assert.throws(() => assayResearchSections({ committee: {}, allowedEvidenceReferences: [], evidenceFacts: [], universe: ["BLK"], horizonDays: 20, observedAt: "not-a-date" }), /research-section-grounding-request-invalid/);
 });
+
+
+function sourceBoundRequest({
+  citedReferences = ["urn:evidence:a"],
+  facts = [{ id: "fact:x", sourceEvidenceId: "urn:evidence:b" }],
+} = {}) {
+  const section = {
+    symbol: "BLK", horizonDays: 20, expectedExcessReturn: 0.02, confidence: 0.5,
+    evidenceReferences: citedReferences, basisFactIds: ["fact:x"], thesis: "bounded",
+  };
+  const candidate = {
+    role: "risk", sections: [section], assumptions: ["bounded"],
+    falsifiers: ["source mismatch"], nonClaims: ["not an order"],
+  };
+  return {
+    committee: {
+      type: "InvestmentResearchCommitteeResult", version: 1,
+      contextProduct: "ni:///sha-256;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      seats: [{ provider: "urn:p:a", role: "risk", candidate, receipt: null }],
+      residues: [], providerDistinct: true, committeeComplete: false,
+      customerAcceptanceEstablished: false, allocationEstablished: false,
+      executionEstablished: false, effect: "untrusted-research-sections-only",
+    },
+    allowedEvidenceReferences: ["urn:evidence:a", "urn:evidence:b"],
+    evidenceFacts: facts,
+    universe: ["BLK"], horizonDays: 20, observedAt: "2026-07-22T23:00:00Z",
+  };
+}
+
+test("refuses a candidate when its fact's actual source is allowed but not cited", () => {
+  const original = sourceBoundRequest();
+  const refused = assayResearchSections(original);
+  assert.equal(refused.admittedSections.length, 0);
+  assert.equal(refused.residues.length, 1);
+  assert.equal(refused.residues[0].reason, "grounding-or-plausibility-refused");
+  assert.deepEqual(refused.four, { positiveEvidence: false, negativeEvidence: true });
+  assert.equal(refused.truthEstablished, false);
+
+  // The same identified fact passes only if this very source is cited.
+  const cited = assayResearchSections(sourceBoundRequest({ citedReferences: ["urn:evidence:b"] }));
+  assert.equal(cited.admittedSections.length, 1);
+  assert.equal(cited.residues.length, 0);
+  assert.deepEqual(cited.admittedSections[0].basisFactIds, ["fact:x"]);
+  assert.deepEqual(cited.admittedSections[0].evidenceReferences, ["urn:evidence:b"]);
+  assert.equal(validateResearchSectionGroundingResult(cited).ok, true);
+});
+
+test("refuses ambiguous duplicate fact identities; preserves source-free legacy facts", () => {
+  const conflicting = sourceBoundRequest({
+    citedReferences: ["urn:evidence:a"],
+    facts: [
+      { id: "fact:x", sourceEvidenceId: "urn:evidence:a" },
+      { id: "fact:x", sourceEvidenceId: "urn:evidence:b" },
+    ],
+  });
+  assert.throws(() => assayResearchSections(conflicting), /duplicate-research-fact-id/);
+  const legacy = assayResearchSections(sourceBoundRequest({ facts: [{ id: "fact:x" }] }));
+  assert.equal(legacy.admittedSections.length, 1);
+});

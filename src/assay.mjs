@@ -7,12 +7,24 @@ import {
 export function assayResearchSections({ committee, allowedEvidenceReferences, evidenceFacts, universe, horizonDays, observedAt, maximumAbsoluteExpectedReturn = 0.1 } = {}) {
   const request = { committee, allowedEvidenceReferences, evidenceFacts, universe, horizonDays, observedAt, maximumAbsoluteExpectedReturn };
   requireValidGroundingCarrier(request, "research-section-grounding-request", validateResearchSectionGroundingRequest);
-  const facts = new Set(evidenceFacts.map(({ id }) => id)), evidence = new Set(allowedEvidenceReferences), providers = new Set(), admitted = [], residues = [];
+  const facts = new Map();
+  // Fact identities must be unambiguous, as at the original committee intake.
+  for (const fact of evidenceFacts) {
+    if (facts.has(fact.id)) throw new TypeError("duplicate-research-fact-id");
+    facts.set(fact.id, fact);
+  }
+  const evidence = new Set(allowedEvidenceReferences), providers = new Set(), admitted = [], residues = [];
   for (const seat of committee.seats) {
     if (providers.has(seat.provider)) { residues.push({ role: seat.role, provider: seat.provider, reason: "repeated-provider" }); continue; }
     providers.add(seat.provider);
     for (const section of seat.candidate.sections) {
-      const valid = universe.includes(section.symbol) && section.horizonDays === horizonDays && Math.abs(Number(section.expectedExcessReturn)) <= maximumAbsoluteExpectedReturn && Number(section.confidence) >= 0 && Number(section.confidence) <= 1 && section.evidenceReferences.every((reference) => evidence.has(reference)) && section.basisFactIds.every((id) => facts.has(id));
+      const valid = universe.includes(section.symbol) && section.horizonDays === horizonDays && Math.abs(Number(section.expectedExcessReturn)) <= maximumAbsoluteExpectedReturn && Number(section.confidence) >= 0 && Number(section.confidence) <= 1 && section.evidenceReferences.every((reference) => evidence.has(reference)) && section.basisFactIds.every((id) => {
+        const fact = facts.get(id);
+        // A different permitted evidence reference cannot stand in for this
+        // fact's identified source. Match the committee producer's law.
+        return fact !== undefined && (fact.sourceEvidenceId === undefined ||
+          section.evidenceReferences.includes(fact.sourceEvidenceId));
+      });
       if (!valid) { residues.push({ role: seat.role, provider: seat.provider, symbol: section.symbol, reason: "grounding-or-plausibility-refused" }); continue; }
       admitted.push(Object.freeze({ provider: seat.provider, role: seat.role, symbol: section.symbol, horizonDays, expectedExcessReturn: Number(section.expectedExcessReturn), confidence: Number(section.confidence), observedAt: new Date(observedAt).toISOString(), evidenceReferences: Object.freeze([...section.evidenceReferences]), basisFactIds: Object.freeze([...section.basisFactIds]), status: "model-judgment-admitted-for-descent-not-truth" }));
     }
