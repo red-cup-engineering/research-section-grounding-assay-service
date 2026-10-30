@@ -6,6 +6,7 @@ on:
       - "test/**"
       - "schemas/**"
       - "package.json"
+      - "package-lock.json"
       - ".npmrc"
       - ".github/workflows/research-grounding.yml"
   push:
@@ -15,6 +16,7 @@ on:
       - "test/**"
       - "schemas/**"
       - "package.json"
+      - "package-lock.json"
       - ".npmrc"
       - ".github/workflows/research-grounding.yml"
   workflow_dispatch:
@@ -29,9 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Resolve the original source-owned package versions into a lock
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --maxsockets=1 --fetch-retries=0
-      - name: Cold-install the exact dependency lock and check the source
+      - name: Cold-install the committed dependency lock and check the original source
         run: |
           sha256sum package-lock.json
           npm ci --ignore-scripts --no-audit --no-fund --maxsockets=1 --fetch-retries=0
@@ -51,11 +51,3 @@ jobs:
               if (!paths.has(path)) throw new Error("missing packed source " + path);
             }
           '
-      - name: Preserve the resolved lock for independent inspection
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: research-grounding-lock-${{ github.sha }}
-          path: package-lock.json
-          if-no-files-found: ignore
-          retention-days: 7
