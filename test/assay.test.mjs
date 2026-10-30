@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assayResearchSections } from "../src/assay.mjs";
+import { createInvestmentResearchCommittee } from "@red-cup-engineering/investment-research-work-lot-service";
 import { RESEARCH_SECTION_GROUNDING_CARRIER_ASSERTIONS, validateResearchSectionGroundingResult } from "../src/schemas.mjs";
 
 test("admits exact grounded model judgments and refuses invented references", () => {
@@ -86,4 +87,43 @@ test("refuses ambiguous duplicate fact identities; preserves source-free legacy 
   assert.throws(() => assayResearchSections(conflicting), /duplicate-research-fact-id/);
   const legacy = assayResearchSections(sourceBoundRequest({ facts: [{ id: "fact:x" }] }));
   assert.equal(legacy.admittedSections.length, 1);
+});
+
+test("the original committee and grounding receiver agree on factual source binding", async () => {
+  const request = {
+    contextProduct: "ni:///sha-256;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    customerActor: "actor:assay", universe: ["BLK"], horizonDays: 20,
+    maxTokensPerSeat: 256, asOf: "2026-10-30T22:00:00Z",
+    evidenceReferences: ["urn:evidence:a", "urn:evidence:b"],
+    evidenceFacts: [{
+      id: "fact:x", metric: "signal", value: 1,
+      sourceEvidenceId: "urn:evidence:b",
+      availableAt: "2026-10-28T00:00:00Z", evidenceStatus: "supported",
+    }],
+  };
+  let candidate = {
+    role: "risk", sections: [{
+      symbol: "BLK", horizonDays: 20, expectedExcessReturn: 0.02, confidence: 0.5,
+      evidenceReferences: ["urn:evidence:a"], basisFactIds: ["fact:x"], thesis: "bounded",
+    }],
+    assumptions: ["bounded"], falsifiers: ["source mismatch"], nonClaims: ["not an order"],
+  };
+  const producer = createInvestmentResearchCommittee({
+    roles: [{ id: "risk", objective: "Qualify exact evidence sources" }],
+    contractInference: async () => ({ result: { provider: "urn:p:a", candidate } }),
+  });
+  await assert.rejects(() => producer(request), /committee-seat-schema-binding-invalid/);
+  candidate = {
+    ...candidate,
+    sections: [{ ...candidate.sections[0], evidenceReferences: ["urn:evidence:b"] }],
+  };
+  const committee = await producer(request);
+  const received = assayResearchSections({
+    committee, allowedEvidenceReferences: request.evidenceReferences,
+    evidenceFacts: request.evidenceFacts, universe: request.universe,
+    horizonDays: request.horizonDays, observedAt: request.asOf,
+  });
+  assert.equal(received.admittedSections.length, 1);
+  assert.equal(received.residues.length, 0);
+  assert.equal(received.truthEstablished, false);
 });
