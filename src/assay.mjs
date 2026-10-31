@@ -4,6 +4,25 @@ import {
   validateResearchSectionGroundingResult,
 } from "./schemas.mjs";
 
+function factAvailableAt(fact, citedReferences, observedAt) {
+  if (!fact) return false;
+  // Legacy source-free facts remain admissible as unqualified inputs.
+  // A provenance claim needs its own source and availability clock.
+  const sourced = ["sourceEvidenceId", "sourceUrl", "availableAt", "observedAt",
+    "assertionForce", "evidenceStatus"].some(key => fact[key] !== undefined);
+  if (!sourced) return true;
+  if (!fact.sourceEvidenceId || !citedReferences.includes(fact.sourceEvidenceId) ||
+      typeof fact.availableAt !== "string") return false;
+  const available = Date.parse(fact.availableAt);
+  const received = Date.parse(observedAt);
+  if (!Number.isFinite(available) || !Number.isFinite(received) || available > received) return false;
+  if (fact.observedAt !== undefined) {
+    const witnessed = Date.parse(fact.observedAt);
+    if (!Number.isFinite(witnessed) || witnessed < available || witnessed > received) return false;
+  }
+  return true;
+}
+
 export function assayResearchSections({ committee, allowedEvidenceReferences, evidenceFacts, universe, horizonDays, observedAt, maximumAbsoluteExpectedReturn = 0.1 } = {}) {
   const request = { committee, allowedEvidenceReferences, evidenceFacts, universe, horizonDays, observedAt, maximumAbsoluteExpectedReturn };
   requireValidGroundingCarrier(request, "research-section-grounding-request", validateResearchSectionGroundingRequest);
@@ -22,8 +41,7 @@ export function assayResearchSections({ committee, allowedEvidenceReferences, ev
         const fact = facts.get(id);
         // A different permitted evidence reference cannot stand in for this
         // fact's identified source. Match the committee producer's law.
-        return fact !== undefined && (fact.sourceEvidenceId === undefined ||
-          section.evidenceReferences.includes(fact.sourceEvidenceId));
+        return factAvailableAt(fact, section.evidenceReferences, observedAt);
       });
       if (!valid) { residues.push({ role: seat.role, provider: seat.provider, symbol: section.symbol, reason: "grounding-or-plausibility-refused" }); continue; }
       admitted.push(Object.freeze({ provider: seat.provider, role: seat.role, symbol: section.symbol, horizonDays, expectedExcessReturn: Number(section.expectedExcessReturn), confidence: Number(section.confidence), observedAt: new Date(observedAt).toISOString(), evidenceReferences: Object.freeze([...section.evidenceReferences]), basisFactIds: Object.freeze([...section.basisFactIds]), status: "model-judgment-admitted-for-descent-not-truth" }));
