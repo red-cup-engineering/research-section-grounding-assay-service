@@ -33,7 +33,7 @@ test("refuses malformed receiver JSON before grounding", () => {
 
 function sourceBoundRequest({
   citedReferences = ["urn:evidence:a"],
-  facts = [{ id: "fact:x", sourceEvidenceId: "urn:evidence:b" }],
+  facts = [{ id: "fact:x", sourceEvidenceId: "urn:evidence:b", availableAt: "2026-07-21T23:00:00Z" }],
 } = {}) {
   const section = {
     symbol: "BLK", horizonDays: 20, expectedExcessReturn: 0.02, confidence: 0.5,
@@ -126,4 +126,39 @@ test("the original committee and grounding receiver agree on factual source bind
   assert.equal(received.admittedSections.length, 1);
   assert.equal(received.residues.length, 0);
   assert.equal(received.truthEstablished, false);
+});
+
+
+test("source provenance cannot anticipate the assay observation clock", () => {
+  const base = { id: "fact:x", sourceEvidenceId: "urn:evidence:b", availableAt: "2026-07-21T23:00:00Z" };
+  const context = { citedReferences: ["urn:evidence:b"] };
+  const accepted = assayResearchSections(sourceBoundRequest({ ...context, facts: [base] }));
+  assert.equal(accepted.admittedSections.length, 1);
+
+  for (const fact of [
+    { ...base, availableAt: "2026-07-23T00:00:00Z" },
+    { ...base, observedAt: "2026-07-23T00:00:00Z" },
+    { ...base, observedAt: "2026-07-20T00:00:00Z" },
+    { id: base.id, sourceEvidenceId: base.sourceEvidenceId },
+    { id: base.id, availableAt: base.availableAt },
+  ]) {
+    const result = assayResearchSections(sourceBoundRequest({ ...context, facts: [fact] }));
+    assert.equal(result.admittedSections.length, 0);
+    assert.equal(result.residues.length, 1);
+    assert.equal(result.four.negativeEvidence, true);
+  }
+  const pastWitness = assayResearchSections(sourceBoundRequest({
+    ...context, facts: [{ ...base, observedAt: "2026-07-22T22:00:00Z" }],
+  }));
+  assert.equal(pastWitness.admittedSections.length, 1);
+  const legacy = assayResearchSections(sourceBoundRequest({ facts: [{ id: "fact:x" }] }));
+  assert.equal(legacy.admittedSections.length, 1);
+});
+
+test("source observation times obey the original schema date-time gate", () => {
+  const invalid = sourceBoundRequest({
+    citedReferences: ["urn:evidence:b"],
+    facts: [{ id: "fact:x", sourceEvidenceId: "urn:evidence:b", availableAt: "2026-02-30T00:00:00Z" }],
+  });
+  assert.throws(() => assayResearchSections(invalid), /research-section-grounding-request-invalid/);
 });
