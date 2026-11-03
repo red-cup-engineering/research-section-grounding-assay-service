@@ -1,0 +1,53 @@
+name: Native research-grounding and provenance receiving
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "schemas/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".npmrc"
+      - ".github/workflows/research-grounding.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "test/**"
+      - "schemas/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".npmrc"
+      - ".github/workflows/research-grounding.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-grounding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Cold-install the committed dependency lock and check the original source
+        run: |
+          sha256sum package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund --maxsockets=1 --fetch-retries=0
+          npm run check
+          npm test
+      - name: Verify the native package still includes its source and schemas
+        run: |
+          npm pack --dry-run --json > /tmp/research-grounding-pack.json
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const pkgs = JSON.parse(readFileSync("/tmp/research-grounding-pack.json", "utf8"));
+            if (pkgs.length !== 1) throw new Error("expected one package");
+            const paths = new Set(pkgs[0].files.map(f => f.path));
+            for (const path of ["src/assay.mjs", "src/schemas.mjs",
+              "schemas/research-section-grounding-request.schema.json",
+              "schemas/research-section-grounding-result.schema.json"]) {
+              if (!paths.has(path)) throw new Error("missing packed source " + path);
+            }
+          '

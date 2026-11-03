@@ -16,8 +16,8 @@
     "src/"
   ],
   "dependencies": {
-    "@red-cup-engineering/json-schema-services-section": "workspace:*",
-    "@red-cup-engineering/investment-research-work-lot-service": "workspace:*"
+    "@red-cup-engineering/json-schema-services-section": "0.5.0",
+    "@red-cup-engineering/investment-research-work-lot-service": "0.2.5"
   },
   "scripts": {
     "check": "node --check src/*.mjs && node --check test/*.test.mjs",
